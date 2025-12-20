@@ -30,7 +30,7 @@
     </style>
 </head>
 <body>
-    <div id="rotate-tip">单指旋转 · 双指指向缩放</div>
+    <div id="rotate-tip">单指旋转 · 双指丝滑缩放</div>
     <div id="top-tip"> 点击屏幕 变换形态 </div>
     <div id="hint">—— 点击礼物盒 开启惊喜 ——<span>— by Yuki —</span></div>
 
@@ -56,11 +56,11 @@
     const state = { transition: 0, explosion: 0, noise: 0 }; 
     let targetRotationY = 0, currentRotationY = 0, isDragging = false, lastX = 0, hasStarted = false;
 
-    // --- 缩放逻辑变量 ---
+    // --- 丝滑缩放核心变量 ---
     const mouse = new THREE.Vector2();
+    let targetCameraPos = new THREE.Vector3(0, 5, 100);
     let initialPinchDistance = 0;
-    const zoomSpeedPC = 0.08;
-    const zoomSpeedMobile = 0.015;
+    const lerpFactor = 0.1; // 惯性平滑系数
 
     function fadeInAudio(audioObj, maxVolume = 0.3, duration = 3000) {
         audioObj.volume = 0;
@@ -110,7 +110,6 @@
         const boxSize = 20;
         for (let i = 0; i < COUNT; i++) {
             const i3 = i * 3;
-            // 礼物盒
             if (i < COUNT * 0.65) { 
                 gift.pos[i3] = (Math.random() - 0.5) * boxSize;
                 gift.pos[i3+1] = (Math.random() - 0.5) * boxSize - 10;
@@ -131,7 +130,7 @@
                 color.setHex(0xfff1b8); 
             }
             gift.col[i3] = color.r; gift.col[i3+1] = color.g; gift.col[i3+2] = color.b;
-            // 圣诞树
+
             if (i < COUNT * 0.92) { 
                 const t = Math.random(); const angle = Math.random() * Math.PI * 2;
                 const tiers = Math.pow(Math.sin(t * 35), 2) * 0.4 + 0.8;
@@ -150,7 +149,7 @@
                 color.setHex(0x5a2d2d); 
             }
             tree.col[i3] = color.r; tree.col[i3+1] = color.g; tree.col[i3+2] = color.b;
-            // 文字
+
             const p = vPoints[i % vPoints.length] || {x:0, y:0};
             text.pos[i3] = p.x + (Math.random()-0.5)*0.5;
             text.pos[i3+1] = p.y + (Math.random()-0.5)*0.5;
@@ -160,21 +159,23 @@
         }
     }
 
-    function getDist(t1, t2) {
-        return Math.sqrt(Math.pow(t1.clientX - t2.clientX, 2) + Math.pow(t1.clientY - t2.clientY, 2));
-    }
-
-    // --- 统一指向性缩放逻辑 ---
-    function zoomAt(pointX, pointY, delta) {
+    // --- 核心逻辑：修正方向后的丝滑缩放 ---
+    function smoothZoomAt(pointX, pointY, delta) {
         mouse.x = (pointX / window.innerWidth) * 2 - 1;
         mouse.y = -(pointY / window.innerHeight) * 2 + 1;
+        
         const vector = new THREE.Vector3(mouse.x, mouse.y, 0.5);
         vector.unproject(camera);
         const dir = vector.sub(camera.position).normalize();
         
-        const newPos = camera.position.clone().add(dir.multiplyScalar(delta));
-        if (newPos.z > 15 && newPos.z < 280) {
-            camera.position.copy(newPos);
+        const dist = targetCameraPos.length();
+        // 修正方向：delta 取负，让上滑(负值)产生正向位移
+        const moveAmount = -delta * (dist * 0.0008); 
+
+        const nextPos = targetCameraPos.clone().add(dir.multiplyScalar(moveAmount));
+        
+        if (nextPos.z > 15 && nextPos.z < 260) {
+            targetCameraPos.copy(nextPos);
         }
     }
 
@@ -184,6 +185,7 @@
         scene = new THREE.Scene();
         camera = new THREE.PerspectiveCamera(60, window.innerWidth/window.innerHeight, 1, 1000);
         camera.position.set(0, 5, 100);
+        targetCameraPos.copy(camera.position);
         
         renderer = new THREE.WebGLRenderer({ antialias: true, alpha: true });
         renderer.setSize(window.innerWidth, window.innerHeight);
@@ -203,7 +205,7 @@
         scene.add(points);
         createSnow(dotTexture); createHalo(dotTexture);
 
-        // --- 交互事件整合 ---
+        // --- 修正后的交互事件 ---
         window.addEventListener('touchstart', e => {
             if (e.touches.length === 1) {
                 isDragging = true; lastX = e.touches[0].clientX;
@@ -219,22 +221,23 @@
                 lastX = e.touches[0].clientX;
             } else if (e.touches.length === 2) {
                 const curDist = getDist(e.touches[0], e.touches[1]);
-                const diff = initialPinchDistance - curDist;
+                const ratio = initialPinchDistance / curDist;
+                // ratio > 1 表示捏合(缩小)，ratio < 1 表示张开(放大)
+                const delta = (ratio - 1) * 350; 
                 const midX = (e.touches[0].clientX + e.touches[1].clientX) / 2;
                 const midY = (e.touches[0].clientY + e.touches[1].clientY) / 2;
-                zoomAt(midX, midY, diff * zoomSpeedMobile);
+                smoothZoomAt(midX, midY, delta);
                 initialPinchDistance = curDist;
             }
         }, { passive: false });
 
-        window.addEventListener('touchend', () => { isDragging = false; });
         window.addEventListener('wheel', e => {
-            zoomAt(e.clientX, e.clientY, e.deltaY * zoomSpeedPC);
+            e.preventDefault();
+            smoothZoomAt(e.clientX, e.clientY, e.deltaY * 0.7);
         }, { passive: false });
 
-        // 双击重置视角
         window.addEventListener('dblclick', () => {
-            new TWEEN.Tween(camera.position).to({ x: 0, y: 5, z: 85 }, 1000).easing(TWEEN.Easing.Cubic.Out).start();
+            targetCameraPos.set(0, 5, 85);
             targetRotationY = 0;
         });
 
@@ -250,7 +253,8 @@
             new TWEEN.Tween(state).to({ explosion: 2.0, noise: 50 }, 700).easing(TWEEN.Easing.Quadratic.Out)
                 .chain(new TWEEN.Tween(state).to({ transition: 1, explosion: 0, noise: 0 }, 3000).easing(TWEEN.Easing.Exponential.InOut)).start();
             setTimeout(() => { topTip.style.opacity = 1; }, 800); 
-            new TWEEN.Tween(camera.position).to({ z: 85 }, 3000).easing(TWEEN.Easing.Cubic.InOut).start();
+            new TWEEN.Tween(camera.position).to({ z: 85 }, 3000).easing(TWEEN.Easing.Cubic.InOut)
+                .onUpdate(() => targetCameraPos.copy(camera.position)).start();
         } else {
             const next = state.transition < 1.5 ? 2 : 1;
             new TWEEN.Tween(state).to({ transition: next }, 2500).easing(TWEEN.Easing.Exponential.InOut).start();
@@ -286,8 +290,17 @@
         scene.add(snowPoints);
     }
 
+    function getDist(t1, t2) {
+        return Math.sqrt(Math.pow(t1.clientX - t2.clientX, 2) + Math.pow(t1.clientY - t2.clientY, 2));
+    }
+
     function animate() {
-        requestAnimationFrame(animate); TWEEN.update();
+        requestAnimationFrame(animate); 
+        TWEEN.update();
+        
+        // 关键：相机平滑插值，解决硬跳转感
+        camera.position.lerp(targetCameraPos, lerpFactor);
+        
         const time = Date.now() * 0.001;
         currentRotationY += (targetRotationY - currentRotationY) * 0.05;
         if (!isDragging) targetRotationY += 0.0012;
