@@ -15,10 +15,12 @@
     </style>
 </head>
 <body>
+    <audio id="bgm" loop src="bgm.mp3"></audio>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/tween.js/18.6.4/tween.umd.js"></script>
 
     <script>
+    const audio = document.getElementById('bgm');
     let scene, camera, renderer, points, snowPoints, haloPoints;
     let mixedPos, mixedCol, vPoints = [];
     const COUNT = 35000; 
@@ -195,6 +197,10 @@
     }
 
     function toggle() {
+        // 只要点击屏幕转换形态，就尝试播放音乐
+        if (audio && audio.paused) {
+            audio.play().catch(e => console.log("请确保目录下有 bgm.mp3"));
+    }
         new TWEEN.Tween(state).to({ progress: state.progress < 0.5 ? 1 : 0 }, 2500).easing(TWEEN.Easing.Exponential.InOut).start();
     }
 
