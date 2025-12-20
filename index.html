@@ -40,6 +40,7 @@
 
     let isDragging = false, hasStarted = false;
     let lastX = 0, lastY = 0, startX = 0, startY = 0;
+    let initialPinchDist = 0; // 新增：记录初始双指距离
     const mouse = new THREE.Vector2();
     const colorTool = new THREE.Color();
 
@@ -54,9 +55,7 @@
     function createData() {
         for (let i = 0; i < COUNT; i++) {
             const i3 = i * 3;
-            // --- 礼物盒几何形状重构 ---
             if (i < COUNT * 0.75) {
-                // 立方体盒体 (Red)
                 const side = Math.floor(Math.random() * 6);
                 let x, y, z;
                 const r = 10;
@@ -68,22 +67,19 @@
                 gift.pos[i3]=x; gift.pos[i3+1]=y-10; gift.pos[i3+2]=z;
                 colorTool.setHex(0xd42d68);
             } else if (i < COUNT * 0.9) {
-                // 金色丝带 (Cross Ribbon)
                 const axis = Math.random() > 0.5 ? 'x' : 'z';
-                const r = 10.2; // 稍微比盒子大一点点
+                const r = 10.2;
                 gift.pos[i3] = axis === 'x' ? (Math.random()-0.5)*20.4 : (Math.random()>0.5?2.5:-2.5);
                 gift.pos[i3+1] = (Math.random()-0.5)*20.4 - 10;
                 gift.pos[i3+2] = axis === 'z' ? (Math.random()-0.5)*20.4 : (Math.random()>0.5?2.5:-2.5);
                 colorTool.setHex(0xffd700);
             } else {
-                // 顶部蝴蝶结 (Bow)
                 const t = Math.random()*6.28, rad = (Math.exp(Math.cos(t)) - 2*Math.cos(4*t) + Math.pow(Math.sin(t/12),5))*2.2;
                 gift.pos[i3] = Math.sin(t)*rad; gift.pos[i3+1] = Math.cos(t)*rad + 2; gift.pos[i3+2] = (Math.random()-0.5)*4;
                 colorTool.setHex(0xfff1b8);
             }
             gift.col[i3]=colorTool.r; gift.col[i3+1]=colorTool.g; gift.col[i3+2]=colorTool.b;
 
-            // 树逻辑保持
             const t = Math.random(), a = Math.random()*6.28, r_tree = ((1-t)*24*(Math.pow(Math.sin(t*35),2)*0.4+0.8))+(Math.random()-0.5)*3;
             if (i < COUNT * 0.92) {
                 tree.pos[i3]=Math.cos(a)*r_tree*Math.pow(Math.random(),0.8); tree.pos[i3+1]=t*48-15; tree.pos[i3+2]=Math.sin(a)*r_tree*Math.pow(Math.random(),0.8);
@@ -122,6 +118,7 @@
         haloPoints = (function(){ const g=new THREE.BufferGeometry(); const p=new Float32Array(HALO_COUNT*3); for(let i=0;i<HALO_COUNT;i++){ const a=Math.random()*6.28, r=4+Math.pow(Math.random(),0.6)*55; p[i*3]=Math.cos(a)*r; p[i*3+1]=-22; p[i*3+2]=Math.sin(a)*r; } g.setAttribute('position', new THREE.BufferAttribute(p,3)); return new THREE.Points(g, new THREE.PointsMaterial({size:0.6, color:0xff69b4, transparent:true, opacity:0.4, blending: THREE.AdditiveBlending, map:tex, depthWrite: false})); })();
         scene.add(haloPoints);
 
+        // --- 鼠标交互逻辑 ---
         window.addEventListener('mousedown', e => { if(e.button === 0) { isDragging = true; startX = e.clientX; startY = e.clientY; lastX = e.clientX; lastY = e.clientY; } });
         window.addEventListener('mousemove', e => {
             mouse.x = (e.clientX / window.innerWidth) * 2 - 1;
@@ -139,6 +136,45 @@
                 isDragging = false;
             }
         });
+
+        // --- 移动端触摸逻辑整合 ---
+        window.addEventListener('touchstart', e => {
+            if (e.touches.length === 1) {
+                isDragging = true;
+                startX = e.touches[0].clientX; startY = e.touches[0].clientY;
+                lastX = startX; lastY = startY;
+            } else if (e.touches.length === 2) {
+                // 双指缩放初始化
+                initialPinchDist = Math.hypot(e.touches[0].pageX - e.touches[1].pageX, e.touches[0].pageY - e.touches[1].pageY);
+            }
+        }, {passive: false});
+
+        window.addEventListener('touchmove', e => {
+            if (e.touches.length === 1 && isDragging) {
+                points.rotation.y += (e.touches[0].clientX - lastX) * 0.008;
+                points.rotation.x += (e.touches[0].clientY - lastY) * 0.008;
+                lastX = e.touches[0].clientX; lastY = e.touches[0].clientY;
+            } else if (e.touches.length === 2) {
+                e.preventDefault(); // 阻止手机浏览器缩放
+                const currentDist = Math.hypot(e.touches[0].pageX - e.touches[1].pageX, e.touches[0].pageY - e.touches[1].pageY);
+                const delta = (currentDist - initialPinchDist) * 0.5;
+                camera.position.z -= delta;
+                initialPinchDist = currentDist;
+                // 限制缩放范围
+                const dist = camera.position.length();
+                if(dist < 15) camera.position.setLength(15);
+                if(dist > 350) camera.position.setLength(350);
+            }
+        }, {passive: false});
+
+        window.addEventListener('touchend', e => {
+            if (isDragging && e.touches.length === 0) {
+                const deltaMove = Math.sqrt(Math.pow(lastX - startX, 2) + Math.pow(lastY - startY, 2));
+                if(deltaMove < 10 && !e.target.classList.contains('ui-btn')) handleInteraction();
+                isDragging = false;
+            }
+        });
+
         window.addEventListener('wheel', e => {
             e.preventDefault();
             const vector = new THREE.Vector3(mouse.x, mouse.y, 0.5);
@@ -240,4 +276,3 @@
     </script>
 </body>
 </html>
-
