@@ -94,7 +94,6 @@
         }
     }
 
-    // --- 新增：地图式定向缩放核心函数 ---
     function zoomToPoint(screenX, screenY, delta) {
         const x = (screenX / window.innerWidth) * 2 - 1;
         const y = -(screenY / window.innerHeight) * 2 + 1;
@@ -151,7 +150,6 @@
             }
         });
 
-        // --- 移动端处理逻辑：单指旋转 + 地图式双指缩放 ---
         window.addEventListener('touchstart', e => {
             if (e.touches.length === 1) {
                 isDragging = true;
@@ -174,7 +172,7 @@
                 const centerX = (e.touches[0].clientX + e.touches[1].clientX) / 2;
                 const centerY = (e.touches[0].clientY + e.touches[1].clientY) / 2;
                 const delta = (currentDist - initialPinchDist) * 0.5;
-                zoomToPoint(centerX, centerY, delta); // 使用中心点进行定向缩放
+                zoomToPoint(centerX, centerY, delta); 
                 initialPinchDist = currentDist;
             }
         }, {passive: false});
@@ -189,7 +187,6 @@
 
         window.addEventListener('wheel', e => {
             e.preventDefault();
-            // 鼠标指向哪里，就向哪里缩放
             zoomToPoint(e.clientX, e.clientY, -e.deltaY * 0.05);
         }, {passive:false});
 
@@ -233,20 +230,27 @@
         const {transition:t, bloom:bl, shimmer:sh, gravity:gv, drift:df} = state;
         const time = Date.now() * 0.001;
 
+        // --- 改动点：极低速呼吸感整体变色 ---
+        // 降低变色速度（从 0.5 降到 0.08），让变色非常缓慢
+        const globalHue = (time * 0.08) % 1; 
+        colorTool.setHSL(globalHue, 0.85, 0.6); 
+        const textR = colorTool.r, textG = colorTool.g, textB = colorTool.b;
+
         for (let i = 0; i < COUNT; i++) {
             const i3 = i * 3;
             let tx, ty, tz, tr, tg, tb;
-            const hue = (time * 0.12 + i * 0.00003) % 1; 
-            colorTool.setHSL(hue, 0.85, 0.6);
-            const textR = colorTool.r, textG = colorTool.g, textB = colorTool.b;
 
             if (t <= 1) {
                 tx = gift.pos[i3]*(1-t)+tree.pos[i3]*t; ty = gift.pos[i3+1]*(1-t)+tree.pos[i3+1]*t; tz = gift.pos[i3+2]*(1-t)+tree.pos[i3+2]*t;
                 tr = gift.col[i3]*(1-t)+tree.col[i3]*t; tg = gift.col[i3+1]*(1-t)+tree.col[i3+1]*t; tb = gift.col[i3+2]*(1-t)+tree.col[i3+2]*t;
             } else {
-                const t2 = t-1;
+                const t2 = Math.min(1, t - 1);
                 tx = tree.pos[i3]*(1-t2)+text.pos[i3]*t2; ty = tree.pos[i3+1]*(1-t2)+text.pos[i3+1]*t2; tz = tree.pos[i3+2]*(1-t2)+text.pos[i3+2]*t2;
-                tr = tree.col[i3]*(1-t2)+textR*t2; tg = tree.col[i3+1]*(1-t2)+textG*t2; tb = tree.col[i3+2]*(1-t2)+textB*t2;
+                
+                // 应用极低速整体变色逻辑
+                tr = tree.col[i3]*(1-t2) + textR*t2;
+                tg = tree.col[i3+1]*(1-t2) + textG*t2;
+                tb = tree.col[i3+2]*(1-t2) + textB*t2;
             }
 
             const ang1 = (i * 0.137) + (df * time * 0.5); const ang2 = (i * 0.618);
