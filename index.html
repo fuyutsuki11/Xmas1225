@@ -9,6 +9,29 @@
             margin: 0; background: radial-gradient(circle at center, #1a0510 0%, #050103 100%); 
             overflow: hidden; touch-action: none; font-family: "Microsoft YaHei", sans-serif;
         }
+        #rotate-tip {
+    position: fixed; 
+    top: 30px; /* 距离顶部距离 */
+    left: 0; 
+    width: 100%; 
+    text-align: center;
+    color: rgba(255, 255, 255, 0.8); /* 半透明白色 */
+    font-size: 14px; 
+    letter-spacing: 2px;
+    z-index: 100; /* 确保在最上层 */
+    pointer-events: none; /* 穿透点击，不影响旋转操作 */
+    font-family: "Microsoft YaHei", sans-serif;
+    
+    /* 绑定呼吸灯动画 */
+    animation: pulse 2s infinite ease-in-out;
+}
+
+/* 呼吸灯动画：透明度在 0.4 到 0.9 之间切换 */
+@keyframes pulse {
+    0% { opacity: 0.4; }
+    50% { opacity: 0.9; }
+    100% { opacity: 0.4; }
+}
         #top-tip {
             position: fixed; top: 10%; left: 0; width: 100%; text-align: center;
             color: rgba(255, 255, 255, 0.6); font-size: 18px; letter-spacing: 3px; 
@@ -24,8 +47,8 @@
     </style>
 </head>
 <body>
-
-    <div id="top-tip">✨ 点击屏幕 变换形态 ✨</div>
+    <div id="rotate-tip"> 按住并拖动屏幕可以旋转</div>
+    <div id="top-tip"> 点击屏幕 变换形态 </div>
     <div id="hint">—— 点击礼物盒 开启惊喜 ——<span>— by Yuki —</span></div>
 
     <audio id="bgm" loop src="bgm.mp3"></audio>
