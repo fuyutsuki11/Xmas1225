@@ -10,44 +10,27 @@
             overflow: hidden; touch-action: none; font-family: "Microsoft YaHei", sans-serif;
         }
         #rotate-tip {
-    position: fixed; 
-    top: 30px; /* 距离顶部距离 */
-    left: 0; 
-    width: 100%; 
-    text-align: center;
-    color: rgba(255, 255, 255, 0.8); /* 半透明白色 */
-    font-size: 14px; 
-    letter-spacing: 2px;
-    z-index: 100; /* 确保在最上层 */
-    pointer-events: none; /* 穿透点击，不影响旋转操作 */
-    font-family: "Microsoft YaHei", sans-serif;
-    
-    /* 绑定呼吸灯动画 */
-    animation: pulse 2s infinite ease-in-out;
-}
-
-/* 呼吸灯动画：透明度在 0.4 到 0.9 之间切换 */
-@keyframes pulse {
-    0% { opacity: 0.4; }
-    50% { opacity: 0.9; }
-    100% { opacity: 0.4; }
-}
+            position: fixed; top: 30px; left: 0; width: 100%; text-align: center;
+            color: rgba(255, 255, 255, 0.8); font-size: 14px; letter-spacing: 2px;
+            z-index: 100; pointer-events: none; animation: pulse 2s infinite ease-in-out;
+        }
+        @keyframes pulse { 0% { opacity: 0.4; } 50% { opacity: 0.9; } 100% { opacity: 0.4; } }
         #top-tip {
             position: fixed; top: 10%; left: 0; width: 100%; text-align: center;
             color: rgba(255, 255, 255, 0.6); font-size: 18px; letter-spacing: 3px; 
-            z-index: 10; opacity: 0; transition: opacity 1.5s; pointer-events: none; white-space: nowrap;
+            z-index: 10; opacity: 0; transition: opacity 1.5s; pointer-events: none;
         }
         #hint {
             position: fixed; bottom: 12%; left: 0; width: 100%; display: flex;
             flex-direction: column; align-items: center; color: rgba(255, 182, 193, 0.7); 
             letter-spacing: 2px; z-index: 10; font-size: 14px; text-align: center; line-height: 2;
-            transition: opacity 0.8s; white-space: nowrap;
+            transition: opacity 0.8s;
         }
         #hint span { font-size: 10px; opacity: 0.8; letter-spacing: 2px; margin-top: 4px; }
     </style>
 </head>
 <body>
-    <div id="rotate-tip"> 按住并拖动屏幕可以旋转</div>
+    <div id="rotate-tip">单指旋转 · 双指缩放</div>
     <div id="top-tip"> 点击屏幕 变换形态 </div>
     <div id="hint">—— 点击礼物盒 开启惊喜 ——<span>— by Yuki —</span></div>
 
@@ -73,7 +56,11 @@
     const state = { transition: 0, explosion: 0, noise: 0 }; 
     let targetRotationY = 0, currentRotationY = 0, isDragging = false, lastX = 0, hasStarted = false;
 
-    // 音量渐入
+    // --- 缩放相关变量 ---
+    let initialPinchDistance = 0;
+    let initialCameraZ = 100;
+    let targetCameraZ = 100;
+
     function fadeInAudio(audioObj, maxVolume = 0.3, duration = 3000) {
         audioObj.volume = 0;
         audioObj.play().catch(e => {});
@@ -120,48 +107,31 @@
     function createData() {
         const color = new THREE.Color();
         const boxSize = 20;
-
         for (let i = 0; i < COUNT; i++) {
             const i3 = i * 3;
-            
-            // --- 礼物盒逻辑 ---
             if (i < COUNT * 0.65) { 
-                // 盒身
                 gift.pos[i3] = (Math.random() - 0.5) * boxSize;
                 gift.pos[i3+1] = (Math.random() - 0.5) * boxSize - 10;
                 gift.pos[i3+2] = (Math.random() - 0.5) * boxSize;
                 color.setHex(0xd42d68);
-            } 
-            else if (i < COUNT * 0.8) {
-                // 打包丝带
+            } else if (i < COUNT * 0.8) {
                 const isVert = Math.random() > 0.5;
                 gift.pos[i3] = isVert ? (Math.random() - 0.5) * (boxSize + 0.6) : (Math.random() - 0.5) * 4.5;
                 gift.pos[i3+1] = (Math.random() - 0.5) * (boxSize + 0.6) - 10;
                 gift.pos[i3+2] = isVert ? (Math.random() - 0.5) * 4.5 : (Math.random() - 0.5) * (boxSize + 0.6);
                 color.setHex(0xffd700);
-            } 
-            else {
-                // --- 🦋 蝴蝶形状蝴蝶结 🦋 ---
+            } else {
                 const t = Math.random() * Math.PI * 2;
-                // 蝴蝶曲线方程核心部分
                 const r = (Math.exp(Math.cos(t)) - 2 * Math.cos(4 * t) + Math.pow(Math.sin(t / 12), 5)) * 2.2;
-                
-                // 转换坐标并让蝴蝶竖立
-                const x = Math.sin(t) * r;
-                const y = Math.cos(t) * r;
-                
-                gift.pos[i3] = x; 
-                gift.pos[i3+1] = y + 3; // 稍微向上偏移，立在盒顶中心
-                gift.pos[i3+2] = (Math.random() - 0.5) * 4 + Math.abs(x) * 0.3; // 翅膀向后微折
-                
+                const x = Math.sin(t) * r; const y = Math.cos(t) * r;
+                gift.pos[i3] = x; gift.pos[i3+1] = y + 3;
+                gift.pos[i3+2] = (Math.random() - 0.5) * 4 + Math.abs(x) * 0.3;
                 color.setHex(0xfff1b8); 
             }
             gift.col[i3] = color.r; gift.col[i3+1] = color.g; gift.col[i3+2] = color.b;
 
-            // --- 圣诞树与文字逻辑 (省略重复说明) ---
             if (i < COUNT * 0.92) { 
-                const t = Math.random();
-                const angle = Math.random() * Math.PI * 2;
+                const t = Math.random(); const angle = Math.random() * Math.PI * 2;
                 const tiers = Math.pow(Math.sin(t * 35), 2) * 0.4 + 0.8;
                 const radius = ((1 - t) * 24 * tiers) + (Math.random() - 0.5) * 3;
                 tree.pos[i3] = Math.cos(angle) * radius * Math.pow(Math.random(), 0.8);
@@ -188,16 +158,24 @@
         }
     }
 
+    // 计算两点间距离
+    function getDist(t1, t2) {
+        return Math.sqrt(Math.pow(t1.clientX - t2.clientX, 2) + Math.pow(t1.clientY - t2.clientY, 2));
+    }
+
     function init() {
         prepareText();
         const dotTexture = createCircleTexture();
         scene = new THREE.Scene();
         camera = new THREE.PerspectiveCamera(60, window.innerWidth/window.innerHeight, 1, 1000);
         camera.position.set(0, 5, 100);
+        targetCameraZ = 100;
+        
         renderer = new THREE.WebGLRenderer({ antialias: true, alpha: true });
         renderer.setSize(window.innerWidth, window.innerHeight);
         renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
         document.body.appendChild(renderer.domElement);
+        
         createData();
         const geo = new THREE.BufferGeometry();
         mixedPos = new Float32Array(gift.pos);
@@ -210,9 +188,36 @@
         }));
         scene.add(points);
         createSnow(dotTexture); createHalo(dotTexture);
-        window.addEventListener('pointerdown', e => { isDragging = true; lastX = e.clientX; });
-        window.addEventListener('pointermove', e => { if (isDragging) { targetRotationY += (e.clientX - lastX) * 0.008; lastX = e.clientX; } });
-        window.addEventListener('pointerup', () => isDragging = false);
+
+        // --- 交互事件 ---
+        window.addEventListener('touchstart', e => {
+            if (e.touches.length === 1) {
+                isDragging = true; lastX = e.touches[0].clientX;
+            } else if (e.touches.length === 2) {
+                isDragging = false;
+                initialPinchDistance = getDist(e.touches[0], e.touches[1]);
+                initialCameraZ = camera.position.z;
+            }
+        }, { passive: false });
+
+        window.addEventListener('touchmove', e => {
+            if (e.touches.length === 1 && isDragging) {
+                targetRotationY += (e.touches[0].clientX - lastX) * 0.008;
+                lastX = e.touches[0].clientX;
+            } else if (e.touches.length === 2) {
+                const curDist = getDist(e.touches[0], e.touches[1]);
+                const zoomFactor = curDist / initialPinchDistance;
+                targetCameraZ = THREE.MathUtils.clamp(initialCameraZ / zoomFactor, 25, 250);
+            }
+        }, { passive: false });
+
+        window.addEventListener('touchend', () => { isDragging = false; });
+
+        // PC 滚轮支持
+        window.addEventListener('wheel', e => {
+            targetCameraZ = THREE.MathUtils.clamp(targetCameraZ + e.deltaY * 0.1, 25, 250);
+        }, { passive: true });
+
         window.addEventListener('click', handleInteraction);
         window.addEventListener('resize', onResize);
         animate();
@@ -225,7 +230,10 @@
             new TWEEN.Tween(state).to({ explosion: 2.0, noise: 50 }, 700).easing(TWEEN.Easing.Quadratic.Out)
                 .chain(new TWEEN.Tween(state).to({ transition: 1, explosion: 0, noise: 0 }, 3000).easing(TWEEN.Easing.Exponential.InOut)).start();
             setTimeout(() => { topTip.style.opacity = 1; }, 800); 
-            new TWEEN.Tween(camera.position).to({ z: 85 }, 3000).easing(TWEEN.Easing.Cubic.InOut).start();
+            // 初始动画也会更新 targetCameraZ
+            new TWEEN.Tween(camera.position).to({ z: 85 }, 3000).easing(TWEEN.Easing.Cubic.InOut).onUpdate(() => {
+                targetCameraZ = camera.position.z;
+            }).start();
         } else {
             const next = state.transition < 1.5 ? 2 : 1;
             new TWEEN.Tween(state).to({ transition: next }, 2500).easing(TWEEN.Easing.Exponential.InOut).start();
@@ -264,10 +272,15 @@
     function animate() {
         requestAnimationFrame(animate); TWEEN.update();
         const time = Date.now() * 0.001;
+        
+        // 平滑旋转
         currentRotationY += (targetRotationY - currentRotationY) * 0.05;
         if (!isDragging) targetRotationY += 0.0012;
-        const t = state.transition, e = state.explosion, n = state.noise;
+        
+        // 平滑缩放
+        camera.position.z += (targetCameraZ - camera.position.z) * 0.1;
 
+        const t = state.transition, e = state.explosion, n = state.noise;
         for (let i = 0; i < COUNT; i++) {
             const i3 = i * 3;
             let tx, ty, tz, tr, tg, tb;
@@ -296,6 +309,7 @@
         points.geometry.attributes.position.needsUpdate = true;
         points.geometry.attributes.color.needsUpdate = true;
         points.rotation.y = currentRotationY;
+
         if (haloPoints) {
             const hp = haloPoints.geometry.attributes.position.array;
             for(let i=0; i<HALO_COUNT; i++) {
