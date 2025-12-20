@@ -40,7 +40,7 @@
 
     let isDragging = false, hasStarted = false;
     let lastX = 0, lastY = 0, startX = 0, startY = 0;
-    let initialPinchDist = 0;
+    let initialPinchDist = 0; 
     const mouse = new THREE.Vector2();
     const colorTool = new THREE.Color();
 
@@ -94,6 +94,21 @@
         }
     }
 
+    // --- 新增：地图式定向缩放核心函数 ---
+    function zoomToPoint(screenX, screenY, delta) {
+        const x = (screenX / window.innerWidth) * 2 - 1;
+        const y = -(screenY / window.innerHeight) * 2 + 1;
+        const vector = new THREE.Vector3(x, y, 0.5);
+        vector.unproject(camera);
+        const dir = vector.sub(camera.position).normalize();
+        const step = delta * 0.2; 
+        const targetPos = camera.position.clone().addScaledVector(dir, step);
+        const dist = targetPos.length();
+        if (dist > 15 && dist < 350) {
+            camera.position.copy(targetPos);
+        }
+    }
+
     function init() {
         prepareText(); createData();
         scene = new THREE.Scene();
@@ -118,7 +133,6 @@
         haloPoints = (function(){ const g=new THREE.BufferGeometry(); const p=new Float32Array(HALO_COUNT*3); for(let i=0;i<HALO_COUNT;i++){ const a=Math.random()*6.28, r=4+Math.pow(Math.random(),0.6)*55; p[i*3]=Math.cos(a)*r; p[i*3+1]=-22; p[i*3+2]=Math.sin(a)*r; } g.setAttribute('position', new THREE.BufferAttribute(p,3)); return new THREE.Points(g, new THREE.PointsMaterial({size:0.6, color:0xff69b4, transparent:true, opacity:0.4, blending: THREE.AdditiveBlending, map:tex, depthWrite: false})); })();
         scene.add(haloPoints);
 
-        // --- 鼠标事件 (保持不变) ---
         window.addEventListener('mousedown', e => { if(e.button === 0) { isDragging = true; startX = e.clientX; startY = e.clientY; lastX = e.clientX; lastY = e.clientY; } });
         window.addEventListener('mousemove', e => {
             mouse.x = (e.clientX / window.innerWidth) * 2 - 1;
@@ -137,43 +151,37 @@
             }
         });
 
-        // --- 核心修正：移动端触摸事件处理 ---
+        // --- 移动端处理逻辑：单指旋转 + 地图式双指缩放 ---
         window.addEventListener('touchstart', e => {
             if (e.touches.length === 1) {
                 isDragging = true;
                 startX = e.touches[0].clientX; startY = e.touches[0].clientY;
                 lastX = startX; lastY = startY;
             } else if (e.touches.length === 2) {
-                isDragging = false; // 双指缩放时停止旋转
+                isDragging = false; 
                 initialPinchDist = Math.hypot(e.touches[0].pageX - e.touches[1].pageX, e.touches[0].pageY - e.touches[1].pageY);
             }
         }, {passive: false});
 
         window.addEventListener('touchmove', e => {
             if (e.touches.length === 1 && isDragging) {
-                // 单指滑动：执行旋转
-                const currentX = e.touches[0].clientX;
-                const currentY = e.touches[0].clientY;
-                points.rotation.y += (currentX - lastX) * 0.008;
-                points.rotation.x += (currentY - lastY) * 0.008;
-                lastX = currentX; lastY = currentY;
+                points.rotation.y += (e.touches[0].clientX - lastX) * 0.008;
+                points.rotation.x += (e.touches[0].clientY - lastY) * 0.008;
+                lastX = e.touches[0].clientX; lastY = e.touches[0].clientY;
             } else if (e.touches.length === 2) {
-                // 双指捏合：执行缩放
                 e.preventDefault(); 
                 const currentDist = Math.hypot(e.touches[0].pageX - e.touches[1].pageX, e.touches[0].pageY - e.touches[1].pageY);
-                const delta = (currentDist - initialPinchDist) * 0.4;
-                camera.position.z -= delta;
+                const centerX = (e.touches[0].clientX + e.touches[1].clientX) / 2;
+                const centerY = (e.touches[0].clientY + e.touches[1].clientY) / 2;
+                const delta = (currentDist - initialPinchDist) * 0.5;
+                zoomToPoint(centerX, centerY, delta); // 使用中心点进行定向缩放
                 initialPinchDist = currentDist;
-                const dist = camera.position.length();
-                if(dist < 15) camera.position.setLength(15);
-                if(dist > 350) camera.position.setLength(350);
             }
         }, {passive: false});
 
         window.addEventListener('touchend', e => {
             if (isDragging && e.touches.length === 0) {
                 const deltaMove = Math.sqrt(Math.pow(lastX - startX, 2) + Math.pow(lastY - startY, 2));
-                // 如果滑动距离很短，判定为点击（开启礼物盒）
                 if(deltaMove < 10 && !e.target.classList.contains('ui-btn')) handleInteraction();
                 isDragging = false;
             }
@@ -181,14 +189,8 @@
 
         window.addEventListener('wheel', e => {
             e.preventDefault();
-            const vector = new THREE.Vector3(mouse.x, mouse.y, 0.5);
-            vector.unproject(camera);
-            const dir = vector.sub(camera.position).normalize();
-            const step = -e.deltaY * 0.05; 
-            camera.position.addScaledVector(dir, step);
-            const dist = camera.position.length();
-            if(dist < 15) camera.position.setLength(15);
-            if(dist > 350) camera.position.setLength(350);
+            // 鼠标指向哪里，就向哪里缩放
+            zoomToPoint(e.clientX, e.clientY, -e.deltaY * 0.05);
         }, {passive:false});
 
         document.getElementById('reset-btn').addEventListener('click', e => {
