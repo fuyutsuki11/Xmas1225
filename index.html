@@ -8,6 +8,7 @@
         body { 
             margin: 0; background: radial-gradient(circle at center, #1a0510 0%, #050103 100%); 
             overflow: hidden; touch-action: none; font-family: "Microsoft YaHei", sans-serif;
+            user-select: none; /* 防止拖动时选中文字 */
         }
         #rotate-tip {
             position: fixed; top: 30px; left: 0; width: 100%; text-align: center;
@@ -30,7 +31,7 @@
     </style>
 </head>
 <body>
-    <div id="rotate-tip">单指旋转 · 双指丝滑缩放</div>
+    <div id="rotate-tip">单指/鼠标左键旋转 · 滚轮/双指缩放</div>
     <div id="top-tip"> 点击屏幕 变换形态 </div>
     <div id="hint">—— 点击礼物盒 开启惊喜 ——<span>— by Yuki —</span></div>
 
@@ -60,7 +61,7 @@
     const mouse = new THREE.Vector2();
     let targetCameraPos = new THREE.Vector3(0, 5, 100);
     let initialPinchDistance = 0;
-    const lerpFactor = 0.1; // 惯性平滑系数
+    const lerpFactor = 0.1;
 
     function fadeInAudio(audioObj, maxVolume = 0.3, duration = 3000) {
         audioObj.volume = 0;
@@ -110,6 +111,7 @@
         const boxSize = 20;
         for (let i = 0; i < COUNT; i++) {
             const i3 = i * 3;
+            // 礼物盒
             if (i < COUNT * 0.65) { 
                 gift.pos[i3] = (Math.random() - 0.5) * boxSize;
                 gift.pos[i3+1] = (Math.random() - 0.5) * boxSize - 10;
@@ -130,7 +132,7 @@
                 color.setHex(0xfff1b8); 
             }
             gift.col[i3] = color.r; gift.col[i3+1] = color.g; gift.col[i3+2] = color.b;
-
+            // 圣诞树
             if (i < COUNT * 0.92) { 
                 const t = Math.random(); const angle = Math.random() * Math.PI * 2;
                 const tiers = Math.pow(Math.sin(t * 35), 2) * 0.4 + 0.8;
@@ -149,7 +151,7 @@
                 color.setHex(0x5a2d2d); 
             }
             tree.col[i3] = color.r; tree.col[i3+1] = color.g; tree.col[i3+2] = color.b;
-
+            // 文字
             const p = vPoints[i % vPoints.length] || {x:0, y:0};
             text.pos[i3] = p.x + (Math.random()-0.5)*0.5;
             text.pos[i3+1] = p.y + (Math.random()-0.5)*0.5;
@@ -159,24 +161,21 @@
         }
     }
 
-    // --- 核心逻辑：修正方向后的丝滑缩放 ---
+    function getDist(t1, t2) {
+        return Math.sqrt(Math.pow(t1.clientX - t2.clientX, 2) + Math.pow(t1.clientY - t2.clientY, 2));
+    }
+
+    // --- 核心指向性缩放逻辑 ---
     function smoothZoomAt(pointX, pointY, delta) {
         mouse.x = (pointX / window.innerWidth) * 2 - 1;
         mouse.y = -(pointY / window.innerHeight) * 2 + 1;
-        
         const vector = new THREE.Vector3(mouse.x, mouse.y, 0.5);
         vector.unproject(camera);
         const dir = vector.sub(camera.position).normalize();
-        
         const dist = targetCameraPos.length();
-        // 修正方向：delta 取负，让上滑(负值)产生正向位移
         const moveAmount = -delta * (dist * 0.0008); 
-
         const nextPos = targetCameraPos.clone().add(dir.multiplyScalar(moveAmount));
-        
-        if (nextPos.z > 15 && nextPos.z < 260) {
-            targetCameraPos.copy(nextPos);
-        }
+        if (nextPos.z > 15 && nextPos.z < 260) targetCameraPos.copy(nextPos);
     }
 
     function init() {
@@ -205,7 +204,27 @@
         scene.add(points);
         createSnow(dotTexture); createHalo(dotTexture);
 
-        // --- 修正后的交互事件 ---
+        // --- 完整交互监听 (PC 鼠标 + 移动端触摸) ---
+
+        // PC 鼠标旋转逻辑
+        window.addEventListener('mousedown', e => {
+            isDragging = true; lastX = e.clientX;
+        });
+        window.addEventListener('mousemove', e => {
+            if (isDragging) {
+                targetRotationY += (e.clientX - lastX) * 0.008;
+                lastX = e.clientX;
+            }
+        });
+        window.addEventListener('mouseup', () => { isDragging = false; });
+
+        // PC 滚轮缩放
+        window.addEventListener('wheel', e => {
+            e.preventDefault();
+            smoothZoomAt(e.clientX, e.clientY, e.deltaY * 0.7);
+        }, { passive: false });
+
+        // 移动端触摸逻辑 (旋转 + 双指缩放)
         window.addEventListener('touchstart', e => {
             if (e.touches.length === 1) {
                 isDragging = true; lastX = e.touches[0].clientX;
@@ -222,7 +241,6 @@
             } else if (e.touches.length === 2) {
                 const curDist = getDist(e.touches[0], e.touches[1]);
                 const ratio = initialPinchDistance / curDist;
-                // ratio > 1 表示捏合(缩小)，ratio < 1 表示张开(放大)
                 const delta = (ratio - 1) * 350; 
                 const midX = (e.touches[0].clientX + e.touches[1].clientX) / 2;
                 const midY = (e.touches[0].clientY + e.touches[1].clientY) / 2;
@@ -231,11 +249,9 @@
             }
         }, { passive: false });
 
-        window.addEventListener('wheel', e => {
-            e.preventDefault();
-            smoothZoomAt(e.clientX, e.clientY, e.deltaY * 0.7);
-        }, { passive: false });
+        window.addEventListener('touchend', () => { isDragging = false; });
 
+        // 双击重置
         window.addEventListener('dblclick', () => {
             targetCameraPos.set(0, 5, 85);
             targetRotationY = 0;
@@ -261,6 +277,7 @@
         }
     }
 
+    // (背景粒子创建逻辑 halo/snow 保持不变...)
     function createHalo(tex) {
         const geo = new THREE.BufferGeometry();
         const pos = new Float32Array(HALO_COUNT * 3);
@@ -290,17 +307,10 @@
         scene.add(snowPoints);
     }
 
-    function getDist(t1, t2) {
-        return Math.sqrt(Math.pow(t1.clientX - t2.clientX, 2) + Math.pow(t1.clientY - t2.clientY, 2));
-    }
-
     function animate() {
         requestAnimationFrame(animate); 
         TWEEN.update();
-        
-        // 关键：相机平滑插值，解决硬跳转感
         camera.position.lerp(targetCameraPos, lerpFactor);
-        
         const time = Date.now() * 0.001;
         currentRotationY += (targetRotationY - currentRotationY) * 0.05;
         if (!isDragging) targetRotationY += 0.0012;
