@@ -9,7 +9,7 @@
         html, body { margin: 0; padding: 0; width: 100%; height: 100%; overflow: hidden; touch-action: none !important; }
         body { background: radial-gradient(circle at center, #1a0510 0%, #050103 100%); font-family: "Microsoft YaHei", sans-serif; user-select: none; }
         
-        /* --- 新增：密码访问层样式 --- */
+        /* 密码访问层样式 */
         #password-overlay {
             position: fixed;
             top: 0; left: 0; width: 100%; height: 100%;
@@ -49,14 +49,13 @@
             font-weight: bold;
             cursor: pointer;
         }
-        /* -------------------------- */
 
         /* 按钮与提示 */
         .btn-container { position: fixed; bottom: 40px; left: 50%; transform: translateX(-50%); display: flex; flex-direction: column; gap: 12px; align-items: center; z-index: 2000; pointer-events: none; }
         .ui-btn { pointer-events: auto; padding: 10px 24px; font-size: 13px; color: white; background: rgba(255, 255, 255, 0.12); border: 1px solid rgba(255, 255, 255, 0.2); border-radius: 20px; cursor: pointer; backdrop-filter: blur(8px); transition: all 0.3s; letter-spacing: 2px; min-width: 120px; outline: none; -webkit-tap-highlight-color: transparent; }
         #back-gift-btn { display: none; }
         
-        #rotate-tip { position: fixed; top: 20px; width: 100%; text-align: center; color: rgba(255, 255, 255, 0.6); font-size: 16px; z-index: 100; pointer-events: none; }
+        #rotate-tip { position: fixed; top: 20px; width: 100%; text-align: center; color: rgba(255, 255, 255, 0.4); font-size: 12px; z-index: 100; pointer-events: none; }
         #top-tip { position: fixed; top: 10%; width: 100%; text-align: center; color: rgba(255, 255, 255, 0.6); font-size: 16px; letter-spacing: 3px; z-index: 10; opacity: 0; transition: opacity 2s; pointer-events: none; }
         #hint { position: fixed; bottom: 15%; width: 100%; display: flex; flex-direction: column; align-items: center; color: rgba(255, 182, 193, 0.7); letter-spacing: 2px; z-index: 10; font-size: 14px; text-align: center; pointer-events: none; transition: opacity 0.8s; }
     </style>
@@ -85,23 +84,26 @@
     <script src="https://cdnjs.cloudflare.com/ajax/libs/tween.js/18.6.4/tween.umd.js"></script>
 
     <script>
-    // --- 新增：密码校验函数 ---
+    // 密码校验逻辑：校验通过即刻播放音乐并初始化
     function checkPassword() {
         const password = document.getElementById('pw-input').value;
-        const correctPassword = "1225"; // 这里设置你的密码
+        const correctPassword = "1225"; // 你可以把 1225 改成你想要的密码
         
         if (password === correctPassword) {
+            // 核心修改：输入密码后立即播放音乐
+            const audio = document.getElementById('bgm');
+            audio.play().catch(e => console.log("音频播放失败:", e));
+
             const overlay = document.getElementById('password-overlay');
             overlay.style.opacity = '0';
             setTimeout(() => {
                 overlay.style.display = 'none';
-                init(); // 只有密码正确才初始化 3D 场景
+                init(); 
             }, 1000);
         } else {
             alert("密码错误，请重试~");
         }
     }
-    // --------------------------
 
     let scene, camera, renderer, points, snowPoints, haloPoints;
     let mixedPos, mixedCol, vPoints = [];
@@ -116,7 +118,6 @@
     let initialPinchDist = 0; 
     const colorTool = new THREE.Color();
 
-    // 保持你原来的函数不变...
     function prepareText() {
         const canvas = document.createElement('canvas'); const ctx = canvas.getContext('2d');
         canvas.width = 1000; canvas.height = 400; ctx.fillStyle = 'white'; ctx.font = 'bold 120px Arial'; ctx.textAlign = 'center';
@@ -128,7 +129,6 @@
     function createData() {
         for (let i = 0; i < COUNT; i++) {
             const i3 = i * 3;
-            // 1. 礼物盒数据
             if (i < COUNT * 0.75) {
                 const side = Math.floor(Math.random() * 6);
                 let x, y, z; const r = 10; const u = (Math.random() - 0.5) * 2 * r; const v = (Math.random() - 0.5) * 2 * r;
@@ -143,7 +143,6 @@
             }
             gift.col[i3]=colorTool.r; gift.col[i3+1]=colorTool.g; gift.col[i3+2]=colorTool.b;
 
-            // 2. 圣诞树数据
             const t_tree = Math.random(), a_tree = Math.random()*6.28, r_tree = ((1-t_tree)*24*(Math.pow(Math.sin(t_tree*35),2)*0.4+0.8))+(Math.random()-0.5)*3;
             if (i < COUNT * 0.92) {
                 tree.pos[i3]=Math.cos(a_tree)*r_tree*Math.pow(Math.random(),0.8); tree.pos[i3+1]=t_tree*48-15; tree.pos[i3+2]=Math.sin(a_tree)*r_tree*Math.pow(Math.random(),0.8);
@@ -232,7 +231,9 @@
     function handleInteraction() {
         if (!hasStarted) {
             hasStarted = true; document.getElementById('hint').style.opacity = 0; document.getElementById('back-gift-btn').style.display = 'block';
-            document.getElementById('bgm').play().catch(()=>{});
+            
+            // 移除了原本在这里的 bgm.play()，因为已经移到了密码按钮上
+
             new TWEEN.Tween(state).to({ bloom: 2.2, shimmer: 3.5 }, 900).easing(TWEEN.Easing.Back.Out).onComplete(() => {
                 new TWEEN.Tween(state).to({ drift: 1.2, gravity: 24 }, 2800).easing(TWEEN.Easing.Quadratic.In).start();
                 new TWEEN.Tween(state).to({ transition: 1, bloom: 0, shimmer: 0 }, 3600).easing(TWEEN.Easing.Quartic.InOut).start();
@@ -290,7 +291,6 @@
         renderer.render(scene, camera);
     }
 
-    // 删除了原本底部的 init()，改由密码校验通过后再调用
     window.onresize = () => { if(camera){camera.aspect = window.innerWidth/window.innerHeight; camera.updateProjectionMatrix(); renderer.setSize(window.innerWidth, window.innerHeight);} };
     </script>
 </body>
