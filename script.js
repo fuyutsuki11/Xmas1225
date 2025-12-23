@@ -19,24 +19,32 @@ function checkPassword() {
 }
 
 let scene, camera, renderer, points, snowPoints, haloPoints;
-let mixedPos, mixedCol, vPoints = [];
+let mixedPos, mixedCol, vPointsEN = [], vPointsCN = []; 
 const COUNT = 38000, HALO_COUNT = 15000;
 const gift = { pos: new Float32Array(COUNT * 3), col: new Float32Array(COUNT * 3) };
 const tree = { pos: new Float32Array(COUNT * 3), col: new Float32Array(COUNT * 3) };
-const text = { pos: new Float32Array(COUNT * 3), col: new Float32Array(COUNT * 3) };
-const state = { transition: 0, bloom: 0, drift: 0, gravity: 0, shimmer: 0 };
+const state = { transition: 0, bloom: 0, drift: 0, gravity: 0, shimmer: 0, textType: 0 }; 
 
 let isDragging = false, hasStarted = false;
 let lastX = 0, lastY = 0, startX = 0, startY = 0;
 let initialPinchDist = 0; 
+let lastTextUpdateTime = 0; // 用于记录上次切换时间
 const colorTool = new THREE.Color();
 
 function prepareText() {
     const canvas = document.createElement('canvas'); const ctx = canvas.getContext('2d');
-    canvas.width = 1000; canvas.height = 400; ctx.fillStyle = 'white'; ctx.font = 'bold 120px Arial'; ctx.textAlign = 'center';
+    canvas.width = 1000; canvas.height = 400; ctx.fillStyle = 'white'; ctx.textAlign = 'center';
+    
+    ctx.font = 'bold 120px Arial';
     ctx.fillText('MERRY', 500, 150); ctx.fillText('CHRISTMAS', 500, 300);
-    const data = ctx.getImageData(0,0,1000,400).data;
-    for(let y=0; y<400; y+=4) for(let x=0; x<1000; x+=4) if(data[(y*1000+x)*4]>128) vPoints.push({x:(x-500)*0.15, y:(200-y)*0.15});
+    let dataEN = ctx.getImageData(0,0,1000,400).data;
+    for(let y=0; y<400; y+=4) for(let x=0; x<1000; x+=4) if(dataEN[(y*1000+x)*4]>128) vPointsEN.push({x:(x-500)*0.15, y:(200-y)*0.15});
+
+    ctx.clearRect(0, 0, 1000, 400);
+    ctx.font = 'bold 180px "Microsoft YaHei", sans-serif'; 
+    ctx.fillText('圣诞快乐', 500, 240);
+    let dataCN = ctx.getImageData(0,0,1000,400).data;
+    for(let y=0; y<400; y+=4) for(let x=0; x<1000; x+=4) if(dataCN[(y*1000+x)*4]>128) vPointsCN.push({x:(x-500)*0.15, y:(200-y)*0.15});
 }
 
 function createData() {
@@ -64,9 +72,6 @@ function createData() {
             tree.pos[i3]=(Math.random()-0.5)*3; tree.pos[i3+1]=-22+Math.random()*8; tree.pos[i3+2]=(Math.random()-0.5)*3; colorTool.setHex(0x5a2d2d);
         }
         tree.col[i3]=colorTool.r; tree.col[i3+1]=colorTool.g; tree.col[i3+2]=colorTool.b;
-
-        const p = vPoints[i % vPoints.length] || {x:0, y:0};
-        text.pos[i3]=p.x; text.pos[i3+1]=p.y; text.pos[i3+2]=(Math.random()-0.5)*5;
     }
 }
 
@@ -143,8 +148,9 @@ function init() {
 
 function handleInteraction() {
     if (!hasStarted) {
-        hasStarted = true; document.getElementById('hint').style.opacity = 0; document.getElementById('back-gift-btn').style.display = 'block';
-        
+        hasStarted = true; 
+        lastTextUpdateTime = Date.now(); // 初始化计时
+        document.getElementById('hint').style.opacity = 0; document.getElementById('back-gift-btn').style.display = 'block';
         new TWEEN.Tween(state).to({ bloom: 2.2, shimmer: 3.5 }, 900).easing(TWEEN.Easing.Back.Out).onComplete(() => {
             new TWEEN.Tween(state).to({ drift: 1.2, gravity: 24 }, 2800).easing(TWEEN.Easing.Quadratic.In).start();
             new TWEEN.Tween(state).to({ transition: 1, bloom: 0, shimmer: 0 }, 3600).easing(TWEEN.Easing.Quartic.InOut).start();
@@ -159,35 +165,68 @@ function handleInteraction() {
 
 function animate() {
     requestAnimationFrame(animate); TWEEN.update();
-    if(!isDragging) points.rotation.y += 0.0015;
-    const time = Date.now() * 0.001;
-    const {transition:t, bloom:bl, shimmer:sh, gravity:gv, drift:df} = state;
+    if(!isDragging) points.rotation.y += 0.003; 
+
+    const currentTime = Date.now();
+    // 修改点：每 5000ms (5秒) 自动切换一次 textType
+    if (hasStarted && state.transition >= 1.5) {
+        if (currentTime - lastTextUpdateTime > 5000) {
+            lastTextUpdateTime = currentTime;
+            let nextType = state.textType === 0 ? 1 : 0;
+            new TWEEN.Tween(state).to({ textType: nextType }, 1500).easing(TWEEN.Easing.Quadratic.InOut).start();
+        }
+    }
+
+    const time = currentTime * 0.001;
+    const {transition:t, bloom:bl, shimmer:sh, gravity:gv, drift:df, textType:tt} = state;
+    
     for (let i = 0; i < COUNT; i++) {
         const i3 = i * 3;
         let tx, ty, tz, tr, tg, tb;
-        const x_offset = text.pos[i3] * 0.015; 
+
+        const pEN = vPointsEN[i % vPointsEN.length] || {x:0, y:0};
+        const pCN = vPointsCN[i % vPointsCN.length] || {x:0, y:0};
+        const curTextX = pEN.x * (1 - tt) + pCN.x * tt;
+        const curTextY = pEN.y * (1 - tt) + pCN.y * tt;
+        const textDepth = ((i % 100) / 100 - 0.5) * 5.0; 
+
+        const x_offset = curTextX * 0.015; 
         const hue = (time * 0.15 - x_offset) % 1; 
         colorTool.setHSL(hue, 0.85, 0.6); 
         const textR = colorTool.r, textG = colorTool.g, textB = colorTool.b;
+
         if (t <= 1) {
-            tx = gift.pos[i3]*(1-t)+tree.pos[i3]*t; ty = gift.pos[i3+1]*(1-t)+tree.pos[i3+1]*t; tz = gift.pos[i3+2]*(1-t)+tree.pos[i3+2]*t;
-            tr = gift.col[i3]*(1-t)+tree.col[i3]*t; tg = gift.col[i3+1]*(1-t)+tree.col[i3+1]*t; tb = gift.col[i3+2]*(1-t)+tree.col[i3+2]*t;
+            tx = gift.pos[i3]*(1-t)+tree.pos[i3]*t; 
+            ty = gift.pos[i3+1]*(1-t)+tree.pos[i3+1]*t; 
+            tz = gift.pos[i3+2]*(1-t)+tree.pos[i3+2]*t;
+            tr = gift.col[i3]*(1-t)+tree.col[i3]*t; 
+            tg = gift.col[i3+1]*(1-t)+tree.col[i3+1]*t; 
+            tb = gift.col[i3+2]*(1-t)+tree.col[i3+2]*t;
         } else {
             const t2 = Math.min(1, t - 1);
-            tx = tree.pos[i3]*(1-t2)+text.pos[i3]*t2; ty = tree.pos[i3+1]*(1-t2)+text.pos[i3+1]*t2; tz = tree.pos[i3+2]*(1-t2)+text.pos[i3+2]*t2;
-            tr = tree.col[i3]*(1-t2) + textR*t2; tg = tree.col[i3+1]*(1-t2) + textG*t2; tb = tree.col[i3+2]*(1-t2) + textB*t2;
+            tx = tree.pos[i3]*(1-t2) + curTextX*t2; 
+            ty = tree.pos[i3+1]*(1-t2) + curTextY*t2; 
+            tz = tree.pos[i3+2]*(1-t2) + textDepth*t2; 
+            tr = tree.col[i3]*(1-t2) + textR*t2; 
+            tg = tree.col[i3+1]*(1-t2) + textG*t2; 
+            tb = tree.col[i3+2]*(1-t2) + textB*t2;
         }
+
         const ang1 = (i * 0.137) + (df * time * 0.5); const ang2 = (i * 0.618);
         const radius = bl * 105 * (1 - Math.pow(Math.min(t, 1), 1.8)); 
         const fall = -gv * Math.pow(1 - Math.min(t, 1), 2.5) * (1 + Math.sin(i)) * 0.2;
+        
         mixedPos[i3] = tx + Math.cos(ang1) * Math.sin(ang2) * radius;
         mixedPos[i3+1] = ty + Math.sin(ang1) * Math.sin(ang2) * radius + fall;
         mixedPos[i3+2] = tz + Math.cos(ang2) * radius;
+        
         const flash = (Math.sin(time * 18 + i) > 0.85) ? sh : 0;
         mixedCol[i3] = tr + flash; mixedCol[i3+1] = tg + flash; mixedCol[i3+2] = tb + flash;
     }
+    
     points.geometry.attributes.position.needsUpdate = true;
     points.geometry.attributes.color.needsUpdate = true;
+    
     if(haloPoints){
         const hp = haloPoints.geometry.attributes.position.array;
         for(let i=0; i<HALO_COUNT; i++){
